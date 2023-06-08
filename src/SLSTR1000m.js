@@ -15,7 +15,7 @@ function setup() {
     ],
     output: [
      {
-        id: "pixelid",
+        id: "pixelidSLSTR1000",
         bands: 1,
         sampleType: "FLOAT32",      
       },
@@ -60,28 +60,20 @@ function evaluatePixel(samples, scenes, inputMetadata, customData, outputMetadat
     let idx = 0;
     
     for (var i=0; i < scenes.OLCI.scenes.length; i++){
-        if (scenes.OLCI.scenes[i].tileOriginalId.slice(43, 46) == "S3A") {
+        if (scenes.OLCI.scenes[i].tileOriginalId.includes("S3A")) {
             if (samples.OLCI[i].SZA < sza_all) {
-                time_idx = scenes.OLCI.scenes[i].tileOriginalId.slice(68, 70)
+                time_idx = scenes.OLCI.scenes[i].tileOriginalId.slice(71, 75)
                 sza_all = samples.OLCI[i].SZA
             }
         }
     }
     
-    //for (var i=0; i < scenes.OLCI.scenes.length; i++){
-    //    if (scenes.OLCI.scenes[i].tileOriginalId.slice(43, 46) == "S3A") {
-    //        
-    //            time_idx = scenes.OLCI.scenes[i].tileOriginalId.slice(68, 70)
-    //            
-    //        
-    //    }
-   // }
     
     
     for (var i=0; i < scenes.SLSTR.scenes.length; i++){
         
-        if (scenes.SLSTR.scenes[i].tileOriginalId.slice(44, 47) == "S3A") {
-           time_slstr = scenes.SLSTR.scenes[i].tileOriginalId.slice(69, 71)
+        if (scenes.SLSTR.scenes[i].tileOriginalId.includes("S3A")) {
+           time_slstr = scenes.SLSTR.scenes[i].tileOriginalId.slice(72, 76)
             
             if (parseInt(time_idx) == parseInt(time_slstr)) {
                 
@@ -98,7 +90,7 @@ function evaluatePixel(samples, scenes, inputMetadata, customData, outputMetadat
     
     
     return {
-      pixelid: pixelid_out,  
+      pixelidSLSTR1000: pixelid_out,  
       S7: S7_out,
       S8: S8_out,
       S9: S9_out,  

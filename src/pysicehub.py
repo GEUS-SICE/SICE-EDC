@@ -1,16 +1,13 @@
 
 # Various utilities
+
 import warnings
-def mute():
-    warnings.filterwarnings("ignore", category=FutureWarning)
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 import argparse
 import sys
 import os
-import json
-from shapely import geometry, wkt
-import IPython.display
 from dataverse_upload import dataverse_upload
-import datetime as dt
 import numpy as np
 from numpy import asarray as ar
 import glob
@@ -23,12 +20,10 @@ import geopandas as gpd
 import rasterio as rio
 import xarray as xr
 from rasterio.transform import Affine
-from pyproj import Transformer
 from pyproj import CRS as CRSproj
 from scipy.spatial import KDTree
 from sentinelhub import SentinelHubBatch, SentinelHubRequest, Geometry, DataCollection, MimeType, SHConfig, BBox, bbox_to_dimensions, ServiceUrl
-from utils import merge_tiffs, importToBucket
-from shapely.geometry import Polygon
+from utils import merge_tiffs
 import tarfile
 from pysice import proc
 from cams import get_maps
@@ -44,9 +39,23 @@ def parse_arguments():
         parser.add_argument("-a","--area", type=str,help="Please input the area you want to proces")
         parser.add_argument("-r","--res", type=int,help="Please input the resolution you want to proces")
         parser.add_argument("-t","--test", type=int, default = 0)
+        parser.add_argument("-del","--ddel", type=bool, default = False)
         args = parser.parse_args()
         return args
 
+
+def multi_merge(product,dl_f,pro_f):
+    
+    prodResult = product.replace(".tif", '_merged.tif')
+    if os.path.exists(prodResult):
+        os.remove(prodResult)
+        logging.info(f'Deleted file: {prodResult}')
+    logging.info(f'Creating file {prodResult}')
+    filenamesList = glob.glob(f'./{dl_f}/*/*/{product}')
+    if filenamesList:
+        merge_tiffs(filenamesList, prodResult, overwrite=True)
+    
+        shutil.move(prodResult, f'{pro_f}/{prodResult}')
 
 def opentiff(filename):
     
@@ -114,7 +123,7 @@ def enablePrint():
 
 def deletefolders(folder,subfolder): 
     shutil.rmtree(folder + os.sep + subfolder)
-    
+      
 def processList(folder, bounds,res,yes):
     bbox = BBox(bbox=bounds, crs="EPSG:3413")
     size = bbox_to_dimensions(bbox, resolution=res)
@@ -161,12 +170,13 @@ def processList(folder, bounds,res,yes):
                 SentinelHubRequest.output_response('toa19', MimeType.TIFF),
                 SentinelHubRequest.output_response('toa20', MimeType.TIFF),
                 SentinelHubRequest.output_response('toa21', MimeType.TIFF),
+                
                 SentinelHubRequest.output_response('saa', MimeType.TIFF),
                 SentinelHubRequest.output_response('vaa', MimeType.TIFF),
                 SentinelHubRequest.output_response('vza', MimeType.TIFF),
                 SentinelHubRequest.output_response('sza', MimeType.TIFF),
                 SentinelHubRequest.output_response('totalozone', MimeType.TIFF),
-                SentinelHubRequest.output_response('pixelid', MimeType.TIFF),
+                SentinelHubRequest.output_response('pixelidOLCI', MimeType.TIFF),
                 SentinelHubRequest.output_response('userdata', MimeType.JSON),
             ],
             bbox=bbox,
@@ -175,10 +185,18 @@ def processList(folder, bounds,res,yes):
         )
         
         resp1 = request1.get_data(save_data=True)
+        
         request2 = SentinelHubRequest(
             evalscript=evalscript2,
             data_folder=folderPath,
             input_data=[
+                SentinelHubRequest.input_data(
+                    data_collection=DataCollection.SENTINEL3_OLCI,
+                    identifier="OLCI",
+                    time_interval=date_range,
+                    upsampling="BICUBIC",
+                    downsampling="BICUBIC",
+                ),
                 SentinelHubRequest.input_data(
                     data_collection=DataCollection.SENTINEL3_SLSTR,
                     identifier="SLSTR",
@@ -191,6 +209,8 @@ def processList(folder, bounds,res,yes):
                 SentinelHubRequest.output_response('S7', MimeType.TIFF),
                 SentinelHubRequest.output_response('S8', MimeType.TIFF),
                 SentinelHubRequest.output_response('S9', MimeType.TIFF),
+                SentinelHubRequest.output_response('pixelidSLSTR1000', MimeType.TIFF),
+                SentinelHubRequest.output_response('userdata', MimeType.JSON),
             ],
             bbox=bbox,
             size=size,
@@ -204,6 +224,13 @@ def processList(folder, bounds,res,yes):
             data_folder=folderPath,
             input_data=[
                 SentinelHubRequest.input_data(
+                    data_collection=DataCollection.SENTINEL3_OLCI,
+                    identifier="OLCI",
+                    time_interval=date_range,
+                    upsampling="BICUBIC",
+                    downsampling="BICUBIC",
+                ),
+                SentinelHubRequest.input_data(
                     data_collection=DataCollection.SENTINEL3_SLSTR,
                     identifier="SLSTR",
                     time_interval=date_range,
@@ -214,6 +241,8 @@ def processList(folder, bounds,res,yes):
             responses=[
                 SentinelHubRequest.output_response('S1', MimeType.TIFF),
                 SentinelHubRequest.output_response('S5', MimeType.TIFF),
+                SentinelHubRequest.output_response('pixelidSLSTR500', MimeType.TIFF),
+                SentinelHubRequest.output_response('userdata', MimeType.JSON),
             ],
             bbox=bbox,
             size=size,
@@ -245,10 +274,13 @@ def processList(folder, bounds,res,yes):
         
     except Exception as e:
         logging.error(e)
-        print(size)
-        print(bbox)
-        print(folder)    
-        yes = 1
+        #print(size)
+        #print(bbox)
+        if os.path.exists(folderPath):
+            logging.info(f'Deleting tile {folder} because of SentinelHub Error')
+            shutil.rmtree(folderPath)
+            yes = 1
+
         
         
         
@@ -286,13 +318,9 @@ def cloudfilt(profile,scene,cd):
             if name == "Snow_Albedo_Sph.tif":
                 print(np.nanmean(data)) 
             
-            data[cd == 255] = np.nan
-            #data[data == 0] = np.nan
             
-            #if name == "response.tiff":
-            #    out = scene[:-5] + "_filt.tif"
-            #else:
-            #    out = scene[:-4] + "_filt.tif"
+            data[cd == 255] = np.nan
+            data[np.isnan(cd)] = np.nan
             
             with rio.open(scene,'w',**profile) as dst:
                 dst.write(data, 1)        
@@ -343,16 +371,16 @@ def nanRemoval(datapath,inpath):
 def mask_sice(sicepath,dempath,scene,usr_p,dlfolder):
     
     masktile = usr_p + os.sep + "masks" + os.sep + "Greenland500m" + os.sep + scene + ".tif"
-    logging.info(f'maskingtile path: {masktile}')
-    print(f'maskingtile path: {masktile}')
+    #logging.info(f'maskingtile path: {masktile}')
+    #print(f'maskingtile path: {masktile}')
     
     xmask,ymask,zmask,projmask = opentiff(masktile)
     datagrid = np.ones_like(zmask) * np.nan
     
     files = glob.glob(sicepath + os.sep + "*.tif")
     dem = glob.glob(dempath + os.sep + "*.tiff")
-    filesscda = glob.glob(dlfolder + os.sep + "*" + os.sep + "*.tif") 
-    files = files + dem + filesscda
+    scda = glob.glob(dlfolder + os.sep + scene + os.sep + "*"  + os.sep + "SCDA.tif")
+    files = files + dem + scda
     
     xdata,ydata,zdata,projdata = opentiff(files[0])   
     
@@ -447,9 +475,6 @@ def SCDA_v20(R550, R16, BT37, BT11, BT12, profile, scene,
     S=base.copy()
     S[:]=1.1
     
-    #masking nan values
-    mask_invalid=np.isnan(R550)
-    
     #tests 1 to 5, only based on inputs
     t1=ar(R550>0.30)*ar(NDSI/R550<0.8)*ar(BT12<=290)
     t2=ar(BT11-BT37<-13)*ar(R550>0.15)*ar(NDSI >= -0.30)\
@@ -474,12 +499,7 @@ def SCDA_v20(R550, R16, BT37, BT11, BT12, profile, scene,
 
     cloud_detection[cloud_detection==False]=t6[cloud_detection==False]
     
-    
-    #masking nan values
-    #cloud_detection[mask_invalid]=True
-    
-    
-    
+  
     if SICE_toolchain:
         cloud_detection = np.where(cloud_detection==True, 255.0, 1.0)
     
@@ -543,6 +563,24 @@ def SCDA(mainpath,scene):
     else: 
         print("Scene is corrupted, Skipping...") 
         
+def multiproc(main,scenes,sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,datecams):
+            
+            try:
+                SCDA(main,scenes)
+                CloudMasking(main,scenes)
+                mask_sice(sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder) 
+                get_maps(sicePathsfilt,sicePathsfilt, datecams,sceneno)
+                proc(sicePathsfilt,demPathsfilt)
+            except Exception as e:
+                
+                logging.info(f"This Scene Would Not Process {scenes}")
+                logging.info("Scene error: ")
+                logging.error(e)
+        
+    
+           
+    
+    
 if __name__ == "__main__":       
     
     #set_start_method('spawn', force=True)
@@ -582,31 +620,21 @@ if __name__ == "__main__":
 
 
     #area of interest
-    if area == "Greenland":
-        toProcess = gpd.read_file("Greenland_50kmTiles.geojson")
+    
+    toProcess = gpd.read_file(f"{area}_50kmTilesBuffer.geojson")
 
     #target projection of the final results
     projection = '3413'
-
-    #target projection of the final results
-    projection = '3413'
-
-    # log processing parameters - don't log any S3 information
-    #logging.info(f'Date: {date}')
-    #logging.info(f'AOI: {aoi_polar}')
-    #logging.info(f'Projection: {projection}')
-
-    #system settings
 
     #base folder where the code is located
     USR_PATH = os.path.abspath('.')
-    EVAL_SCRIPT1_PATH = os.path.join(USR_PATH, 'S3Adata.js') 
-    EVAL_SCRIPT2_PATH = os.path.join(USR_PATH, 'eval1000Tile.js') 
-    EVAL_SCRIPT3_PATH = os.path.join(USR_PATH, 'evalSLSTR500.js') 
+    EVAL_SCRIPT1_PATH = os.path.join(USR_PATH, 'S3A_OLCI.js') 
+    EVAL_SCRIPT2_PATH = os.path.join(USR_PATH, 'SLSTR1000m.js') 
+    EVAL_SCRIPT3_PATH = os.path.join(USR_PATH, 'SLSTR500m.js') 
     EVAL_SCRIPT4_PATH = os.path.join(USR_PATH, 'dem.js') 
 
     #delete download folder after processing - will save space but will download all the data for each requwst (otherwise the cached tile data will be used)
-    DELETE_DOWNLOAD_FOLDER = False
+    DELETE_DOWNLOAD_FOLDER = args.ddel
 
     #OUTPUT_DIR = os.path.join(USR_PATH, "output") #local folder
     OUTPUT_DIR =  os.path.join(USR_PATH, "output") #local folder # will be copied to the local folder of the user requesting the data
@@ -661,8 +689,9 @@ if __name__ == "__main__":
     with open(EVAL_SCRIPT4_PATH, "r") as f:
         evalscript4 = f.read()    
 
-
+    
     logging.info("Configuration ok.")    
+    
 
     date_range = (f'{date}T08:00:00', f'{date}T18:00:00')
 
@@ -674,12 +703,12 @@ if __name__ == "__main__":
     #Remove chunks that are too small to be processed
     MIN_AREA = 0.05 * (50000 * 50000)
     toProcess = toProcess[toProcess.geometry.to_crs('epsg:3413').area > MIN_AREA]
-
+    
     if os.path.exists(DL_FOLDER):
         subf = os.listdir(DL_FOLDER)
         mainf = [DL_FOLDER for i in range(len(subf))]
         logging.info(f'Deleting Folder: {DL_FOLDER}')
-        with get_context("spawn").Pool(12,initializer=mute) as p:
+        with get_context("spawn").Pool(12) as p:
             p.starmap(deletefolders,zip(mainf,subf))
             p.close()
         logging.info(f'Folder {DL_FOLDER} deleted')
@@ -687,7 +716,7 @@ if __name__ == "__main__":
 
     # make concurrent calls using all the available processor
     logging.info(f'Processing tiles. Number of tiles to process: {len(toProcess.id)}')
-
+    
     # This downloads all the tiles and do some proc
     executor = ConcurrentSHRequestExecutor(toProcess)
     executor.executeRequests()  
@@ -718,6 +747,8 @@ if __name__ == "__main__":
     for idx in notProcessed.index: 
         id = round(notProcessed.id[idx])
         bounds = list(notProcessed.loc[idx].geometry.bounds)
+        
+            
         processList(id, bounds,res,0)    
 
     logging.info('Done')
@@ -727,18 +758,37 @@ if __name__ == "__main__":
     filenamesList = glob.glob(f'./{DL_FOLDER}/*/*/response.tar')
     dest = [file.replace('response.tar', '') for file in filenamesList]
 
-    with get_context("spawn").Pool(12,initializer=mute) as p:     
+    with get_context("spawn").Pool(12) as p:     
         p.starmap(tarextract,zip(filenamesList,dest))
         p.close()
-        
+
     logging.info("Done")
 
-    #define the products that will be computed
-    products = ['toa1.tif','toa2.tif','toa3.tif','toa4.tif','toa5.tif','toa6.tif','toa7.tif','toa8.tif','toa9.tif',\
-               'toa10.tif','toa11.tif','toa12.tif','toa13.tif','toa14.tif','toa15.tif','toa16.tif','toa17.tif','toa18.tif',\
-               'toa19.tif','toa20.tif','toa21.tif','vza.tif','sza.tif','vaa.tif','saa.tif','totalozon.tif','albedo_bb_spherical_sw.tif',
-               'albedo_bb_planar_sw.tif','grain_diameter.tif','r0.tif','SCDA.tif','albedo_spectral_planar_21.tif','albedo_spectral_planar_17.tif','AOD_550.tif','isnow.tif','factor.tif']
-    #products = ['Snow_Grain_Diameter.tif']
+
+    bands = np.arange(1,22)
+    
+    bands_sice = np.concatenate((bands[bands < 12],bands[bands > 15]))
+    
+    toa = [("toa" + str(b) + ".tif") for b in bands]
+    toa_out = [("r_TOA_" + str(b).zfill(2) + ".tif") for b in bands]
+    alb_spec = [("albedo_spectral_planar_" + str(b).zfill(2) + ".tif") for b in bands_sice]
+    alb_spec_out = [("albedo_spectral_planar_" + str(b).zfill(2) + ".tif") for b in bands_sice]
+    rBRR_spec = [("rBRR_" + str(b).zfill(2)  + ".tif") for b in bands_sice]
+    rBRR_spec_out = [("rBRR_" + str(b).zfill(2) + ".tif") for b in bands_sice]
+    
+    misc_prod = ['th.tif','grain_diameter.tif','snow_specific_area.tif','sza.tif','vza.tif','saa.tif','vaa.tif','albedo_bb_planar_sw.tif',\
+                 'albedo_bb_spherical_sw.tif','isnow.tif','AOD_550.tif','ANG.tif','r0.tif','SCDA.tif','al.tif','O3_SICE.tif',\
+                 'factor.tif','cv1.tif','cv2.tif','pixelidOLCI.tif','pixelidSLSTR500.tif']
+               
+    misc_prod_out = ['threshold.tif','grain_diameter.tif','snow_specific_surface_area.tif','sza.tif','vza.tif','saa.tif','vaa.tif',\
+                  'albedo_bb_planar_sw.tif','albedo_bb_spherical_sw.tif','isnow.tif','AOD_550.tif','ANG.tif','r0.tif','cloud_mask.tif',\
+                    'al.tif','O3_SICE.tif','factor.tif','cv1.tif','cv2.tif','pixelidOLCI.tif','pixelidSLSTR500.tif']
+    
+    products = misc_prod + toa + alb_spec + rBRR_spec
+    
+    out = misc_prod_out + toa_out + alb_spec_out + rBRR_spec_out
+
+   
 
     # Create SCDA of each tile
 
@@ -752,6 +802,7 @@ if __name__ == "__main__":
     sicePaths = glob.glob(parent + "/*/*/*toa1.tif")
     demPaths = glob.glob(parent + "/*/*/*response.tiff")
 
+
     sicePathsfilt = [[s[:-8]  for s in sicePaths if (s.split(os.sep)[-3]==d.split(os.sep)[-3])] for d in demPaths]
     sicePathsfilt = [item for sublist in sicePathsfilt for item in sublist]
 
@@ -760,75 +811,41 @@ if __name__ == "__main__":
 
     sceneno = [[s.split(os.sep)[-3]  for s in sicePaths if (s.split(os.sep)[-3]==d.split(os.sep)[-3])] for d in demPaths]
     sceneno = [item for sublist in sceneno for item in sublist]
-    
+
     usrpath = [USR_PATH for ii in range(len(sceneno))]
+    dlfolder = [DL_FOLDER for ii in range(len(sceneno))]
     datecams = [date for x in range(len(demPathsfilt))]
-    
-    dlfolder = [dlfolder for ii in range(len(sceneno))]
-    
-    
-   
-    try: 
-        with get_context("spawn").Pool(12,initializer=mute) as p:     
-            
-            logging.info("Calculating Cloud Mask")
-            p.starmap(SCDA,zip(main,scenes))
-            p.close()
-            p.join()
-            logging.info("Done")
-            
-            logging.info("Removing Clouds")
-            p.starmap(CloudMasking,zip(main,scenes))
-            p.close()
-            p.join()
-            logging.info("Done")
-             
-            logging.info('Masking the data') 
-            p.starmap(mask_sice,zip(sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder))
-            p.close()
-            p.join()
-            logging.info('Done')
-            
-            logging.info("Getting Cams Maps")
-            p.starmap(get_maps,zip(sicePathsfilt,sicePathsfilt, datecams,sceneno))
-            p.close()
-            p.join()
-            logging.info("Done")
-            
-            logging.info('Executing pysice')
-            p.starmap(proc,zip(sicePathsfilt,demPathsfilt))
-            p.close()
-            p.join()
-            logging.info("Done")
-           
-            p.close()
 
-    except: 
-        logging.info("Something went wrong with the parallelization...")
-        pass
     
-    #merge individual tiles into one single image
-    for productName in products:
-        prodResult = productName.replace(".tif", '_merged.tif')
-        if os.path.exists(prodResult):
-            os.remove(prodResult)
-            logging.info(f'Deleted file: {prodResult}')
-        logging.info(f'Creating file {prodResult}')
-        filenamesList = glob.glob(f'./{DL_FOLDER}/*/*/{productName}')
-        merge_tiffs(filenamesList, prodResult, overwrite=True)
-        if not os.path.exists(PROCESSED_FOLDER):
-            os.makedirs(PROCESSED_FOLDER)
-        shutil.move(prodResult, f'{PROCESSED_FOLDER}/{prodResult}')
 
+    with get_context("spawn").Pool(12) as p:
+            logging.info('Executing pysicehub')
+            p.starmap(multiproc,zip(main,scenes,sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,datecams))
+            p.close()
+            p.join()
+            logging.info("Done")
 
+    
+    proproduct = [PROCESSED_FOLDER for ii in range(len(products))]
+    dlproduct = [DL_FOLDER for ii in range(len(products))]
+    
+    if not os.path.exists(PROCESSED_FOLDER):
+        os.makedirs(PROCESSED_FOLDER)
+    
+    with get_context("spawn").Pool(12) as p:     
+            p.starmap(multi_merge,zip(products,dlproduct,proproduct))
+            p.close()
+            p.join()
+            logging.info("Done")
+
+  
     resultsDataPath = os.path.join(USR_PATH, PROCESSED_FOLDER)
     processedDataPath = os.path.join(USR_PATH, PROCESSED_FOLDER)
-    for product in products:
+    for product,out in zip(products,out):
             srcFile = processedDataPath + "/" + product.replace(".tif", "_merged.tif")
-            destFile = processedDataPath + "/" + product
+            destFile = processedDataPath + "/" + out
             if os.path.exists(srcFile):
                 os.rename(srcFile, destFile)
-  
 
     finalOutput = f'{OUTPUT_DIR}/sice_{res}_{DATE_FOLDER}'
 
@@ -845,9 +862,10 @@ if __name__ == "__main__":
         logging.info(f'Deleting Folder: {DL_FOLDER}')
         with get_context("spawn").Pool(12) as p:     
             p.starmap(deletefolders,zip(mainf,subf))
+       
         logging.info(f'Folder {DL_FOLDER} deleted')
 
+
+    logging.info('Converting to netcdf and uploading to Dataverse')
     finalOutput =  f'{OUTPUT_DIR}/sice_{res}_{DATE_FOLDER}'
     dataverse_upload(finalOutput)
-
-    # Upload to Dataverse

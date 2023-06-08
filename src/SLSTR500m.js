@@ -14,7 +14,7 @@ function setup() {
     ],
     output: [
       {
-        id: "pixelid",
+        id: "pixelidSLSTR500",
         bands: 1,
         sampleType: "FLOAT32",      
       },  
@@ -33,13 +33,6 @@ function setup() {
   };
 }
 
-//function updateOutput(outputs, collections) {
-//  Object.values(outputs).forEach((output) => {
-//    output.bands = collections.scenes.length;
-//  });
-//}
-
-// Set constants as global variables which can be used in all functions
 
 function evaluatePixel(samples, scenes, inputMetadata, customData, outputMetadata) {
     
@@ -51,30 +44,20 @@ function evaluatePixel(samples, scenes, inputMetadata, customData, outputMetadat
     let pixelid_out = [];
     let idx = 0;
     let time_slstr = 0;
-    
+  
    for (var i=0; i < scenes.OLCI.scenes.length; i++){
-        if (scenes.OLCI.scenes[i].tileOriginalId.slice(43, 46) == "S3A") {
+        if (scenes.OLCI.scenes[i].tileOriginalId.includes("S3A")) {
             if (samples.OLCI[i].SZA < sza_all) {
-                time_idx = scenes.OLCI.scenes[i].tileOriginalId.slice(68, 70)
+                time_idx = scenes.OLCI.scenes[i].tileOriginalId.slice(71, 75)
                 sza_all = samples.OLCI[i].SZA
             }
         }
     }
     
-    //for (var i=0; i < scenes.OLCI.scenes.length; i++){
-    //    if (scenes.OLCI.scenes[i].tileOriginalId.slice(43, 46) == "S3A") {
-    //        
-    //            time_idx = scenes.OLCI.scenes[i].tileOriginalId.slice(68, 70)
-    //            
-    //        
-    //    }
-    //}
-    
-    
     for (var i=0; i < scenes.SLSTR.scenes.length; i++){
         
-        if (scenes.SLSTR.scenes[i].tileOriginalId.slice(44, 47) == "S3A") {
-           time_slstr = scenes.SLSTR.scenes[i].tileOriginalId.slice(69, 71)
+        if (scenes.SLSTR.scenes[i].tileOriginalId.includes("S3A")) {
+           time_slstr = scenes.SLSTR.scenes[i].tileOriginalId.slice(72, 76)
             
             if (parseInt(time_idx) == parseInt(time_slstr)) {
                 
@@ -89,7 +72,7 @@ function evaluatePixel(samples, scenes, inputMetadata, customData, outputMetadat
     S5_out.push(samples.SLSTR[idx].S5);
     
     return {
-      pixelid : pixelid_out,  
+      pixelidSLSTR500 : pixelid_out,  
       S1 : S1_out,
       S5 : S5_out,
     };

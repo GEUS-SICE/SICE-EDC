@@ -10,7 +10,7 @@ function setup() {
     ],
     output: [
       {
-        id: "pixelid",
+        id: "pixelidOLCI",
         bands: 1,
         sampleType: "FLOAT32",      
       },    
@@ -149,13 +149,6 @@ function setup() {
   };
 }
 
-// function updateOutput(outputs, collections) {
-//  Object.values(outputs).forEach((output) => {
-//    output.bands = collections.scenes.length;
-//  });
-// }
-
-// Set constants as global variables which can be used in all functions
 
 function evaluatePixel(samples, scenes, inputMetadata, customData, outputMetadata) {
 
@@ -190,25 +183,25 @@ function evaluatePixel(samples, scenes, inputMetadata, customData, outputMetadat
     let totalozone_out = [];
     let stop = 0;
     let sza_all = 180;
-    let idx = 0;
+    let idx = 10; 
     let pixel_id = [];
-    let default_val = 0
+    let default_val = 0;
     
-    for (var i=0; i < scenes.tiles.length; i++){
-        if (scenes.tiles[i].tileOriginalId.slice(43, 46) == "S3A") {
-            if (samples[i].SZA < sza_all) {
-                idx = scenes.tiles[i].__idx
-                sza_all = samples[i].SZA
+    for (var i=0; i < samples.length; i++){
+        
+        if (scenes.tiles[i].tileOriginalId.includes("S3A")) {
+            
+            if (1.5 > samples[i].B01 && samples[i].B01 > 0) {
+                if (samples[i].SZA < sza_all) {
+                    idx = scenes.tiles[i].__idx;
+                    sza_all = samples[i].SZA;
+            
+                }
             }
         }
     }
     
-    //for (var i=0; i < scenes.tiles.length; i++){
-    //    if (scenes.tiles[i].tileOriginalId.slice(43, 46) == "S3A"){
-    //            idx = scenes.tiles[i].__idx
-    //    }
-    //}
-    
+   
     try {
     pixel_id.push(idx);
     toa1_out.push(samples[idx].B01);
@@ -269,7 +262,7 @@ function evaluatePixel(samples, scenes, inputMetadata, customData, outputMetadat
     
   
     return {
-      pixelid : pixel_id,
+      pixelidOLCI : pixel_id,
       toa1 : toa1_out,
       toa2 : toa2_out,
       toa3 : toa3_out,
