@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# %%
 """
 Created on Mon Oct 14 16:58:31 2019
 Update 07032019
@@ -26,7 +27,7 @@ w = np.array((0.4000E+00, 0.4125E+00, 0.4425E+00,   0.4900E+00, 0.5100E+00, 0.56
 # Imaginary part of ice refrative index at OLCI channels
 bai = np.array((2.365E-11, 2.7E-11,  7.0E-11, 4.17E-10,  8.04E-10,  2.84E-09,  8.58E-09,  1.78E-08,  1.95E-08, 2.1E-08, 3.3E-08, 6.23E-08, 7.1E-08,  7.68E-08,  8.13E-08, 9.88E-08,  2.4E-07, 3.64E-07,  4.2E-07, 5.53e-07,  2.25E-06)).astype('float32')
 
-#%% Solar flux
+# %% Solar flux
 def sol(x):
     # SOLAR SPECTRUM at GROUND level
     # Inputs:
@@ -59,7 +60,7 @@ sol3_pol   = sol1_pol  +  sol2
 # asol specific band
 asol = sol(0.865) - sol(0.7)
 
-#%% analystical function and coefficients used in the polluted snow BBA calculation
+# %% analystical function and coefficients used in the polluted snow BBA calculation
 def analyt_func(z1, z2):
     # see BBA_calc_pol
     # compatible with array

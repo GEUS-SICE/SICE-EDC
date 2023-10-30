@@ -9,24 +9,25 @@ import os
 import numpy as np
 from pyproj import CRS,Transformer
 import netCDF4 as nc 
-import xarray as xr
 from rasterio.transform import Affine
-import rasterio
+import rasterio as rio
 import pandas as pd
+from pyproj import CRS as CRSproj
+import warnings
+#from pyDataverse.api import NativeApi
 
 def opentiff(filename):
 
     "Input: Filename of GeoTIFF File "
     "Output: xgrid,ygrid, data paramater of Tiff, the data projection"
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    
+    da = rio.open(filename)
+    proj = CRSproj(da.crs)
 
-    da = xr.open_rasterio(filename)
-    proj = CRS.from_string(da.crs)
-
-
-    transform = Affine(*da.transform)
-    elevation = np.array(da.variable[0],dtype=np.float32)
-    nx,ny = da.sizes['x'],da.sizes['y']
-    x,y = np.meshgrid(np.arange(nx,dtype=np.float32), np.arange(ny,dtype=np.float32)) * transform
+    elevation = np.array(da.read(1),dtype=np.float32)
+    nx,ny = da.width,da.height
+    x,y = np.meshgrid(np.arange(nx,dtype=np.float32), np.arange(ny,dtype=np.float32)) * da.transform
 
     da.close()
 
@@ -175,19 +176,29 @@ def to_netcdf(folder):
     
     return folder + os.sep + filename
 
-def dataverse_upload(folder):
+def dataverse_upload(folder,area):
     
     # --------------------------------------------------
     # Update the 4 params below to run this code
     # --------------------------------------------------
+    
+    
+    
     dataverse_server = 'https://dataverse.geus.dk'
     api_key = '44154c44-ec27-46c5-945e-9f46bb102950'
     
     #doi = pd.read_csv("GEUSdataverse_doi.csv")
-    doi = "doi:10.22008/FK2/FBIFOX"
+    doi_csv = pd.read_csv('GEUSdataverse_doi.csv')
+    doi = doi_csv[area][0]
+    
+    #api = NativeApi(dataverse_server,api_key)
+    
+    
     nc_file = to_netcdf(folder)
     fileup = {'file': open(nc_file, "rb")}
 
+    
+    
     output_filename = nc_file.split(os.sep)[-1]
     filedate =  nc_file[-13:-3]
     fileyear = filedate[:4]
@@ -212,5 +223,7 @@ def dataverse_upload(folder):
     
     if r.json()['status'] == 'ERROR':
             print(r.json())
+    #else:
+    #    resp = api.publish_dataset(doi, release_type "major")
 
  

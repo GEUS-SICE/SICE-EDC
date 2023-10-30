@@ -23,8 +23,8 @@ def plot_image(image, factor=1.0, clip_range=None, **kwargs):
         ax.imshow(image * factor, **kwargs)
     ax.set_xticks([])
     ax.set_yticks([])
-    
-    
+
+
 def merge_tiffs(input_filename_list, merged_filename, *, overwrite=False, delete_input=False):
     """Performs gdal_merge on a set of given geotiff images
 
@@ -50,7 +50,7 @@ def merge_tiffs(input_filename_list, merged_filename, *, overwrite=False, delete
         for filename in input_filename_list:
             if os.path.isfile(filename):
                 os.remove(filename)
-                
+
 def importToBucket(awsConfig, resultsFolder):
     
     try:

@@ -1,0 +1,9 @@
+curl --verbose \
+  --request POST 'https://<EDC_WPS_ENDPOINT>/processes/execute-notebook/jobs?async-execute=True' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{"inputs":[
+          {
+              "id": "notebook",
+              "value": "SICE/daily_wrapper_notebook.ipynb"
+          }
+      ]}'

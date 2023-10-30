@@ -58,16 +58,21 @@ import glob
 from pyproj import CRS,Transformer
 import cdsapi
 from scipy.spatial import KDTree
+import rasterio as rio
 import xarray as xr
 import numpy as np
 import time
 import datetime as dt
 from rasterio.transform import Affine
+from pyproj import CRS as CRSproj
 import rasterio
+import warnings
 import logging
+import zipfile
+import shutil
 WGSProj = CRS.from_string("+init=EPSG:4326")
 PolarProj = CRS.from_string("+init=EPSG:3413")
-   
+
 logging.basicConfig(
         format='%(asctime)s [%(levelname)s] %(name)s - %(message)s',
         level=logging.INFO,
@@ -82,10 +87,10 @@ def blockPrint():
 
 def enablePrint():
     sys.stdout = sys.__stdout__
-    
+
 if sys.version_info < (3, 4):
     raise "must use python 3.6 or greater"
-    
+
 
 def parse_arguments():
         parser = argparse.ArgumentParser(description='main excicuteable for the SICE CAMS Aerosol data and regridding')
@@ -94,7 +99,7 @@ def parse_arguments():
         parser.add_argument("-o","--outputfolder", type=str, help="Please input the output folder for the CAMS Data")
         args = parser.parse_args()
         return args
-    
+
 
 def APIrequest(date,lead,scene,area):
     
@@ -125,21 +130,20 @@ def APIrequest(date,lead,scene,area):
 
 def OpenRaster(filename):
     
-   "Input: Filename of GeoTIFF File"
-   "Output: xgrid,ygrid, data paramater of Tiff, the data projection"
-   
-   
-   
-   da = xr.open_rasterio(filename)
-   proj = CRS.from_string(da.crs)
+    "Input: Filename of GeoTIFF File "
+    "Output: xgrid,ygrid, data paramater of Tiff, the data projection"
+    warnings.filterwarnings("ignore", category=FutureWarning)
 
-   transform = Affine(*da.transform)
-   elevation = np.array(da.variable[0],dtype=np.float32)
-   nx,ny = da.sizes['x'],da.sizes['y']
-   x,y = np.meshgrid(np.arange(nx,dtype=np.float32), np.arange(ny,dtype=np.float32)) * transform
-   
-   
-   return x,y,elevation,proj
+    da = rio.open(filename)
+    proj = CRSproj(da.crs)
+
+    elevation = np.array(da.read(1),dtype=np.float32)
+    nx,ny = da.width,da.height
+    x,y = np.meshgrid(np.arange(nx,dtype=np.float32), np.arange(ny,dtype=np.float32)) * da.transform
+
+    da.close()
+
+    return x,y,elevation,proj
 
 
 
@@ -234,99 +238,43 @@ def get_maps(grid,output,day,scene):
     #logging.info(f"cams area:  {area}")
     #logging.info(f"cams lead:  {lead}")
     base_folder = os.getcwd()
-    c = cdsapi.Client()
+    down_folder = base_folder + os.sep + scene
+    
+    if os.path.exists(down_folder):
+        shutil.rmtree(down_folder)
+        os.mkdir(down_folder)
+    else:
+        os.mkdir(down_folder)
+    
+    
+    c = cdsapi.Client(key='13901:b4109228-0834-4e2e-8890-82b29fd64c9c', url='https://ads.atmosphere.copernicus.eu/api/v2')
     c.retrieve(
                         'cams-global-atmospheric-composition-forecasts',
                         {
                             'date':  date + '/' + date,
                             'type': 'forecast',
-                            'format': 'grib',
+                            'format': 'netcdf_zip',
                             'variable': [
                                 'total_aerosol_optical_depth_550nm', 'total_aerosol_optical_depth_670nm',
                             ],
-                            'time': '00:00',
+                            'time': '12:00',
                             'leadtime_hour': lead,
                             'area': area,
                         },
-                        base_folder + os.sep + 'Aerosol_' + scene + '.grib')
-    
-    """
-    sleep = 2
-    sleepcycle = 0
-    
-    base_folder = os.getcwd()
-    try_no = 0
-    while True:
-        try: 
-            r = c.retrieve(
-                        'cams-global-atmospheric-composition-forecasts',
-                        {
-                            'date':  date + '/' + date,
-                            'type': 'forecast',
-                            'format': 'grib',
-                            'variable': [
-                                'total_aerosol_optical_depth_550nm', 'total_aerosol_optical_depth_670nm',
-                            ],
-                            'time': '00:00',
-                            'leadtime_hour': lead,
-                            'area': area,
-                        },
-                        base_folder + os.sep + 'Aerosol_' + scene + '.grib')
-            r.update()
-            time.sleep(sleep)
-        except KeyError:
-            logging.info("KeyError")
-            try_no += 1
-            
-        if try_no == 5:
-            
-            return
-        
-        
+                        down_folder + os.sep + 'Aerosol_' + scene + '.netcdf_zip')
     
     
-    
-    
-    
-    #main_folder = os.getcwd()
-    #download_folder = main_folder + os.sep + "Aerosol"
-    
-    #if not os.path.exists(download_folder):
-    #    os.mkdir(download_folder)
-    
-    
-    #os.chdir(download_folder)
-    
-    #APIrequest(date, lead, scene, area)
-        
-    while True:
-        if not os.path.exists(base_folder + os.sep + 'Aerosol_' + scene + '.grib'):
-            sleepcycle += 1
-            logging.info(f"Waiting for Download, Attempt {sleepcycle}.....")
-            time.sleep(sleep) 
-            if sleepcycle == 5:
-                logging.info(f"Timeout limit of 25 seconds reached, returning") 
-                files_del = glob.glob(base_folder + os.sep + 'Aerosol_' + scene + '*')
-                
-                if files_del:
-                    for f_d in files_del:
-                        os.remove(f_d)
-
-                return
-            #r.update()
-        else: 
-            break
-       
-    """
+    with zipfile.ZipFile(down_folder + os.sep + 'Aerosol_' + scene + '.netcdf_zip', 'r') as zip_ref:
+        zip_ref.extractall(down_folder)
     
     ##### Opening Dataset and Changing to EPSG:3413 Proj #####
     
-    ds = xr.open_dataset('Aerosol_' + scene + '.grib', engine='cfgrib')
+    ds = xr.open_dataset(down_folder + os.sep + 'data.nc')
     
     lon = np.array(ds.longitude)
     lat = np.array(ds.latitude)
-    aod550 = np.array(ds.aod550)
-    aod670 = np.array(ds.aod670)
+    aod550 = np.array(ds.aod550[0])
+    aod670 = np.array(ds.aod670[0])
     
     lon, lat = np.meshgrid(lon, lat)
     
@@ -347,11 +295,8 @@ def get_maps(grid,output,day,scene):
     
     ds.close()
     
-    files_del = glob.glob(base_folder + os.sep + 'Aerosol_' + scene + '*')
-    
-    if files_del:
-        for f_d in files_del:
-            os.remove(f_d)
+    if os.path.exists(down_folder) :
+        shutil.rmtree(down_folder)
     
     #os.chdir(main_folder)
     
@@ -405,8 +350,8 @@ def get_maps(grid,output,day,scene):
         
     ExportGeoTiff(gridx, gridy, gridaod550, PolarProj, AerosolFolder, "AOD_550.tif")
     ExportGeoTiff(gridx, gridy, gridang, PolarProj, AerosolFolder, "ANG.tif")
+
             
+
             
-            
-            
-            
+

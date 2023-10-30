@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# %%
 """
 This script contains the constants needed by the pySICE library.
 @author: bav@geus.dk

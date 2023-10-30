@@ -11,9 +11,10 @@ tip list:
 import os
 import xarray as xr
 import numpy as np
-import rioxarray
+#import rioxarray
 import argparse
 import sys
+import rasterio as rio
 import pandas as pd
 
 try:
@@ -96,10 +97,32 @@ class sice_io(object):
             chunks = None
             chunks = "auto"
             # data = xr.open_rasterio(os.path.join(self.dirname, filename), chunks=chunks).squeeze(dim='band', drop=True)
-            data = rioxarray.open_rasterio(
-                os.path.join(direc, filename), chunks=chunks
-            ).squeeze(dim="band", drop=True)
-
+            #data = rioxarray.open_rasterio(
+            #    os.path.join(direc, filename), chunks=chunks
+            #).squeeze(dim="band", drop=True)
+            
+            da = rio.open(os.path.join(direc, filename))
+            x_range = np.arange(da.width,dtype=np.float32)
+            y_range = np.arange(da.height,dtype=np.float32)
+            x_coor,dum = da.xy(x_range,x_range)
+            dum,y_coor = da.xy(y_range,y_range)
+            
+            self.crs = da.crs
+            self.transform = da.transform
+            
+            data = xr.DataArray(
+                        data=da.read(),
+                        attrs=dict(
+                                transform=da.transform,
+                                crs=da.crs,),
+                        dims=["band","y", "x"],
+                        coords=dict(
+                            band=(["band"],np.arange(len(da.read()))),
+                            x=(["x"], x_coor),
+                            y=(["y"], y_coor),
+                        ),
+                    ).squeeze(dim="band", drop=True)
+            
             if width is not None:
                 data = data.isel(x=slice(x0, x0 + width))
             if height is not None:
@@ -115,6 +138,7 @@ class sice_io(object):
         for i in range(21):
             try:
                 dat = read_tif(self.dirname,f"toa{i + 1}.tif")
+                
             except:
                 if i in [0, 3, 16, 20]:
                     raise Exception("Missing the necessary bands")
@@ -125,7 +149,12 @@ class sice_io(object):
                     )
                     dat = xr.full_like(self.toa[0], fill_value=np.nan)
             self.toa.append(dat)
+        
+        
+        self.meta['transform_out'] = self.toa[0].transform
+        self.meta['crs_out'] = self.toa[0].crs
         self.olci_scene = xr.Dataset()
+        
         self.olci_scene["toa"] = xr.concat(self.toa, dim="band")
         # print("toa=", self.toa.coords)
 
@@ -336,7 +365,7 @@ class sice_io(object):
         )
 
 
-def write_output(snow, OutputFolder, filename):
+def write_output(snow, OutputFolder, filename,crs,transform):
     if filename.endswith('.csv'):
         print('\nText file output')
         data_out = pd.DataFrame()
@@ -375,10 +404,24 @@ def write_output(snow, OutputFolder, filename):
             "ntype": "pol_type"   # ntype: 1(soot), 2( dust), 3 and 4 (other or mixture)
         }
 
-        def da_to_tif(da, file_path):
+        def da_to_tif(da, file_path,crs,transform):
             da = da.unstack(dim="xy").transpose("y", "x")
-            da.rio.to_raster(file_path, dtype="float32", compress="DEFLATE")
-    
+            print(da)
+            #da.rio.to_raster(file_path, dtype="float32", compress="DEFLATE")
+            with rio.open(
+            file_path,
+            'w',
+            driver='GTiff',
+            height=da.data.shape[0],
+            width=da.data.shape[1],
+            count=1,
+            compress="DEFLATE",
+            dtype=da.data.dtype,
+            crs=crs,
+            transform=transform,
+            ) as dst:
+                dst.write(da.data, 1)
+                
         for var in [
             "diameter",
             "area",
@@ -397,19 +440,19 @@ def write_output(snow, OutputFolder, filename):
         ]:
             if var in snow.keys():
                 da_to_tif(
-                    snow[var], os.path.join(OutputFolder, file_name_list[var] + ".tif")
+                    snow[var], os.path.join(OutputFolder, file_name_list[var] + ".tif"),crs,transform
                 )
 
         for i in np.append(np.arange(11), np.arange(15, 21)):
             if snow.alb_sph.sel(band=i).notnull().any():
                 da_to_tif(snow.alb_sph.sel(band=i),
-                          OutputFolder+'/albedo_spectral_spherical_' + str(i + 1).zfill(2) + ".tif")
+                          OutputFolder+'/albedo_spectral_spherical_' + str(i + 1).zfill(2) + ".tif",crs,transform)
             if snow.rp.sel(band=i).notnull().any():
                 da_to_tif(snow.rp.sel(band=i), 
-                      OutputFolder+'/albedo_spectral_planar_' + str(i + 1).zfill(2) + ".tif")
+                      OutputFolder+'/albedo_spectral_planar_' + str(i + 1).zfill(2) + ".tif",crs,transform)
             if snow.refl.sel(band=i).notnull().any():
                 da_to_tif(snow.refl.sel(band=i), 
-                      OutputFolder+'/rBRR_' + str(i + 1).zfill(2) + ".tif")
+                      OutputFolder+'/rBRR_' + str(i + 1).zfill(2) + ".tif",crs,transform)
 
 
 def get_parser():

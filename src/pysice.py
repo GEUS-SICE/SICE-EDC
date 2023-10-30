@@ -1152,6 +1152,8 @@ def proc(inputfolder, demfolder, outputfolder = None, clean_snow = None, no_qc =
     # args.clean_snow = False
     # args.no_qc = False
     # args.no_oz = False
+    
+    
 
     #args = parse_args(sys.argv[1:])
     InputPath = get_input_folder(inputfolder)
@@ -1178,7 +1180,7 @@ def proc(inputfolder, demfolder, outputfolder = None, clean_snow = None, no_qc =
     OLCI_reader = sice_io(InputPath,DemPath)
     OLCI_reader.open_tif()
     OLCI_scene = OLCI_reader.olci_scene
-
+    OLCI_meta = OLCI_reader.meta
     start_time = time.process_time()
 
     if len(OLCI_scene.xy) < 1000000:
@@ -1203,5 +1205,5 @@ def proc(inputfolder, demfolder, outputfolder = None, clean_snow = None, no_qc =
         snow.isnow[snow.albedo_bb_spherical_sw < 0.565] = 3
     except:
         pass 
-    write_output(snow, OutputFolder, OLCI_reader.dirname)
+    write_output(snow, OutputFolder, OLCI_reader.dirname,OLCI_meta['crs_out'],OLCI_meta['transform_out'])
 

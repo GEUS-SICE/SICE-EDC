@@ -7,7 +7,11 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 import argparse
 import sys
 import os
+import json
+from shapely import geometry, wkt
+import IPython.display
 from dataverse_upload import dataverse_upload
+import datetime as dt
 import numpy as np
 from numpy import asarray as ar
 import glob
@@ -15,15 +19,17 @@ import shutil
 import logging
 import concurrent.futures
 import time
+import pandas as pd
 from multiprocessing import set_start_method,get_context
 import geopandas as gpd
 import rasterio as rio
-import xarray as xr
 from rasterio.transform import Affine
+from pyproj import Transformer
 from pyproj import CRS as CRSproj
 from scipy.spatial import KDTree
 from sentinelhub import SentinelHubBatch, SentinelHubRequest, Geometry, DataCollection, MimeType, SHConfig, BBox, bbox_to_dimensions, ServiceUrl
-from utils import merge_tiffs
+from utils import merge_tiffs, importToBucket
+from shapely.geometry import Polygon
 import tarfile
 from pysice import proc
 from cams import get_maps
@@ -31,15 +37,16 @@ from cams import get_maps
 
 if sys.version_info < (3, 4):
     raise "must use python 3.6 or greater"
-    
+
 
 def parse_arguments():
         parser = argparse.ArgumentParser(description='')
         parser.add_argument("-d","--day", type=str,help="Please input the day you want to proces")
-        parser.add_argument("-a","--area", type=str,help="Please input the area you want to proces")
+        parser.add_argument("-a","--area", type=str,help="Please input the area you want to proces",\
+                            choices=['Greenland','Iceland','Svalbard','SouthernArcticCanada','NorthernArcticCanada',\
+                                     'AlaskaYukon','SevernayaZemlya','NovayaZemlya','FransJosefLand','Norway'])
         parser.add_argument("-r","--res", type=int,help="Please input the resolution you want to proces")
         parser.add_argument("-t","--test", type=int, default = 0)
-        parser.add_argument("-del","--ddel", type=bool, default = False)
         args = parser.parse_args()
         return args
 
@@ -58,23 +65,22 @@ def multi_merge(product,dl_f,pro_f):
         shutil.move(prodResult, f'{pro_f}/{prodResult}')
 
 def opentiff(filename):
-    
+
     "Input: Filename of GeoTIFF File "
     "Output: xgrid,ygrid, data paramater of Tiff, the data projection"
     warnings.filterwarnings("ignore", category=FutureWarning)
-    da = xr.open_rasterio(filename)
-    proj = CRSproj.from_string(da.crs)
+    
+    da = rio.open(filename)
+    proj = CRSproj(da.crs)
 
-
-    transform = Affine(*da.transform)
-    elevation = np.array(da.variable[0],dtype=np.float32)
-    nx,ny = da.sizes['x'],da.sizes['y']
-    x,y = np.meshgrid(np.arange(nx,dtype=np.float32), np.arange(ny,dtype=np.float32)) * transform
+    elevation = np.array(da.read(1),dtype=np.float32)
+    nx,ny = da.width,da.height
+    x,y = np.meshgrid(np.arange(nx,dtype=np.float32), np.arange(ny,dtype=np.float32)) * da.transform
 
     da.close()
-   
+
     return x,y,elevation,proj
-    
+
 def exporttiff(x,y,z,crs,filename):
     
     "Input: xgrid,ygrid, data paramater, the data projection, export path, name of tif file"
@@ -123,10 +129,13 @@ def enablePrint():
 
 def deletefolders(folder,subfolder): 
     shutil.rmtree(folder + os.sep + subfolder)
-      
+
 def processList(folder, bounds,res,yes):
     bbox = BBox(bbox=bounds, crs="EPSG:3413")
-    size = bbox_to_dimensions(bbox, resolution=res)
+    #size = bbox_to_dimensions(bbox, resolution=res)
+    east1, north1 = bbox.lower_left
+    east2, north2 = bbox.upper_right
+    size = round(abs(east2 - east1) / res), round(abs(north2 - north1) / res)
     folderPath = f'{DL_FOLDER}/{folder}'
     if yes == 1:
         print("Still Going")
@@ -214,7 +223,7 @@ def processList(folder, bounds,res,yes):
             ],
             bbox=bbox,
             size=size,
-            config=slstr_config,
+            config=sh_config,
         )
         resp2 = request2.get_data(save_data=True)
         
@@ -246,7 +255,7 @@ def processList(folder, bounds,res,yes):
             ],
             bbox=bbox,
             size=size,
-            config=slstr_config,
+            config=sh_config,
         )
         resp3 = request3.get_data(save_data=True)
         
@@ -274,16 +283,18 @@ def processList(folder, bounds,res,yes):
         
     except Exception as e:
         logging.error(e)
-        #print(size)
-        #print(bbox)
+        logging.error(folder)
+        logging.error(size)
+        logging.error(bbox)
+        logging.error(date_range)
         if os.path.exists(folderPath):
             logging.info(f'Deleting tile {folder} because of SentinelHub Error')
             shutil.rmtree(folderPath)
             yes = 1
 
         
-        
-        
+
+
 class ConcurrentSHRequestExecutor:
     def __init__(self, toProcess):
         self.toProcess = toProcess
@@ -296,7 +307,7 @@ class ConcurrentSHRequestExecutor:
             executor.map(self.operation, np.arange(0, len(self.toProcess.values)), chunksize=4)
         print("done")
 
-        
+
 def cloudfilt(profile,scene,cd):
     warnings.filterwarnings("ignore", category=FutureWarning)
     scenespath = glob.glob(scene + os.sep + "*.tif")
@@ -324,9 +335,9 @@ def cloudfilt(profile,scene,cd):
             
             with rio.open(scene,'w',**profile) as dst:
                 dst.write(data, 1)        
-        
+
     
-        
+
 def CloudMasking(mainpath,scene):
     
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -349,7 +360,7 @@ def CloudMasking(mainpath,scene):
             logging.info("Error in Meta Response Tiff")
             logging.info(scene)
             logging.info(metaresponse)
-                
+
             
 
 def nanRemoval(datapath,inpath):
@@ -368,9 +379,9 @@ def nanRemoval(datapath,inpath):
     with rio.open(datapath,'w',**profile) as dst:
         dst.write(dataz, 1)            
 
-def mask_sice(sicepath,dempath,scene,usr_p,dlfolder):
+def mask_sice(sicepath,dempath,scene,usr_p,dlfolder,area):
     
-    masktile = usr_p + os.sep + "masks" + os.sep + "Greenland500m" + os.sep + scene + ".tif"
+    masktile = usr_p + os.sep + "masks" + os.sep + area + "500m" + os.sep + scene + ".tif"
     #logging.info(f'maskingtile path: {masktile}')
     #print(f'maskingtile path: {masktile}')
     
@@ -382,6 +393,7 @@ def mask_sice(sicepath,dempath,scene,usr_p,dlfolder):
     scda = glob.glob(dlfolder + os.sep + scene + os.sep + "*"  + os.sep + "SCDA.tif")
     files = files + dem + scda
     
+    #logging.info(f"Using Opentiiff on {scene}")
     xdata,ydata,zdata,projdata = opentiff(files[0])   
     
     tree = KDTree(np.c_[xdata.ravel(),ydata.ravel()])   
@@ -398,8 +410,8 @@ def mask_sice(sicepath,dempath,scene,usr_p,dlfolder):
         #name = f.split(os.sep)[-1]
         
         exporttiff(xmask,ymask,datagrid,projdata,f)
-    
-        
+
+
 def radiometric_calibration(R16path,scene,inpath):
     
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -427,7 +439,7 @@ def radiometric_calibration(R16path,scene,inpath):
     outpath =  R16path[:-6] 
     with rio.open(outpath + 'S5_rc.tif','w',**profile_R16) as dst:
         dst.write(R16_rc, 1)        
-        
+
 def SCDA_v20(R550, R16, BT37, BT11, BT12, profile, scene, 
              inpath, despath, SICE_toolchain=True):
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -475,6 +487,9 @@ def SCDA_v20(R550, R16, BT37, BT11, BT12, profile, scene,
     S=base.copy()
     S[:]=1.1
     
+    #masking nan values
+    mask_invalid=np.isnan(R550)
+    
     #tests 1 to 5, only based on inputs
     t1=ar(R550>0.30)*ar(NDSI/R550<0.8)*ar(BT12<=290)
     t2=ar(BT11-BT37<-13)*ar(R550>0.15)*ar(NDSI >= -0.30)\
@@ -499,7 +514,12 @@ def SCDA_v20(R550, R16, BT37, BT11, BT12, profile, scene,
 
     cloud_detection[cloud_detection==False]=t6[cloud_detection==False]
     
-  
+    
+    #masking nan values
+    #cloud_detection[mask_invalid]=True
+    
+    
+    
     if SICE_toolchain:
         cloud_detection = np.where(cloud_detection==True, 255.0, 1.0)
     
@@ -562,25 +582,28 @@ def SCDA(mainpath,scene):
 
     else: 
         print("Scene is corrupted, Skipping...") 
-        
-def multiproc(main,scenes,sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,datecams):
+
+def multiproc(main,scenes,sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,datecams,area):
             
             try:
+                logging.info(f"Processing {scenes}")
+                
                 SCDA(main,scenes)
                 CloudMasking(main,scenes)
-                mask_sice(sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder) 
+                mask_sice(sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,area) 
                 get_maps(sicePathsfilt,sicePathsfilt, datecams,sceneno)
                 proc(sicePathsfilt,demPathsfilt)
+                
             except Exception as e:
                 
                 logging.info(f"This Scene Would Not Process {scenes}")
                 logging.info("Scene error: ")
                 logging.error(e)
-        
+
     
-           
+
     
-    
+
 if __name__ == "__main__":       
     
     #set_start_method('spawn', force=True)
@@ -598,7 +621,7 @@ if __name__ == "__main__":
     area = args.area
     res = args.res # minimum resolution of data is 300m
     test = args.test
-
+    USR_PATH = os.path.abspath('.')
 
     # create logs folder
     if not os.path.exists("logs"):
@@ -620,21 +643,30 @@ if __name__ == "__main__":
 
 
     #area of interest
-    
-    toProcess = gpd.read_file(f"{area}_50kmTilesBuffer.geojson")
+                                     
+    tiles_area = USR_PATH +os.sep + 'masks' + os.sep + 'tiles' + os.sep + area + "_50kmTilesBuffer.geojson"
+                                     
+    toProcess = gpd.read_file(tiles_area)
 
     #target projection of the final results
     projection = '3413'
 
+    # log processing parameters - don't log any S3 information
+    #logging.info(f'Date: {date}')
+    #logging.info(f'AOI: {aoi_polar}')
+    #logging.info(f'Projection: {projection}')
+
+    #system settings
+
     #base folder where the code is located
-    USR_PATH = os.path.abspath('.')
-    EVAL_SCRIPT1_PATH = os.path.join(USR_PATH, 'S3A_OLCI.js') 
-    EVAL_SCRIPT2_PATH = os.path.join(USR_PATH, 'SLSTR1000m.js') 
-    EVAL_SCRIPT3_PATH = os.path.join(USR_PATH, 'SLSTR500m.js') 
+   
+    EVAL_SCRIPT1_PATH = os.path.join(USR_PATH, 'S3Adata.js') 
+    EVAL_SCRIPT2_PATH = os.path.join(USR_PATH, 'eval1000Tile.js') 
+    EVAL_SCRIPT3_PATH = os.path.join(USR_PATH, 'evalSLSTR500.js') 
     EVAL_SCRIPT4_PATH = os.path.join(USR_PATH, 'dem.js') 
 
     #delete download folder after processing - will save space but will download all the data for each requwst (otherwise the cached tile data will be used)
-    DELETE_DOWNLOAD_FOLDER = args.ddel
+    DELETE_DOWNLOAD_FOLDER = False
 
     #OUTPUT_DIR = os.path.join(USR_PATH, "output") #local folder
     OUTPUT_DIR =  os.path.join(USR_PATH, "output") #local folder # will be copied to the local folder of the user requesting the data
@@ -644,15 +676,18 @@ if __name__ == "__main__":
         os.makedirs("output")
 
 
+    
     logging.info("System configuration ok.")    
-
     # initial ENV configuration
     #SH_CLIENT_ID = %env SH_CLIENT_ID
     #SH_CLIENT_SECRET = %env SH_CLIENT_SECRET
-
-    SH_CLIENT_ID = os.environ.get('SH_CLIENT_ID')
-    SH_CLIENT_SECRET = os.environ.get('SH_CLIENT_SECRET')
-
+    try:
+        SH_CLIENT_ID = os.environ.get('SH_CLIENT_ID')
+        SH_CLIENT_SECRET = os.environ.get('SH_CLIENT_SECRET')
+    except:
+        logging.info("Please input your SentinelHub Client and Secret ID in pysicehub.py")
+        
+    
     #print(SH_CLIENT_ID)
     #print(SH_CLIENT_SECRET)
 
@@ -663,16 +698,16 @@ if __name__ == "__main__":
     sh_config.sh_client_id = SH_CLIENT_ID
     sh_config.sh_client_secret = SH_CLIENT_SECRET
 
-    sh_config.save()
+    #sh_config.save()
 
-    slstr_config = SHConfig()
-    slstr_config.sh_base_url = "https://creodias.sentinel-hub.com"
-    slstr_config.download_timeout_seconds=300
+    #slstr_config = SHConfig()
+    #slstr_config.sh_base_url = "https://creodias.sentinel-hub.com"
+    #slstr_config.download_timeout_seconds=300
 
-    slstr_config.sh_client_id = SH_CLIENT_ID
-    slstr_config.sh_client_secret = SH_CLIENT_SECRET
+    #slstr_config.sh_client_id = SH_CLIENT_ID
+    #slstr_config.sh_client_secret = SH_CLIENT_SECRET
 
-    slstr_config.save()
+    #slstr_config.save()
 
     # Evalscript
     with open(EVAL_SCRIPT1_PATH, "r") as f:
@@ -692,79 +727,87 @@ if __name__ == "__main__":
     
     logging.info("Configuration ok.")    
     
-
-    date_range = (f'{date}T08:00:00', f'{date}T18:00:00')
+    down = 1
+    
+    utc_shift = int(pd.read_csv("UTC_TimeShift.csv")[area])
+    date_morning = str(8 - utc_shift).zfill(2)
+    date_evening = str(18 - utc_shift).zfill(2)
+    
+    if int(date_evening) > 23:
+        date_evening = '23'
+    
+    date_range = (f'{date}T{date_morning}:00:00', f'{date}T{date_evening}:00:00')
 
 
     DATE_FOLDER = date.replace("-","_")
     DL_FOLDER =  os.path.join('downloads', str(res), DATE_FOLDER)
     PROCESSED_FOLDER = f'{DL_FOLDER}/processed'
-
-    #Remove chunks that are too small to be processed
-    MIN_AREA = 0.05 * (50000 * 50000)
-    toProcess = toProcess[toProcess.geometry.to_crs('epsg:3413').area > MIN_AREA]
-    
-    if os.path.exists(DL_FOLDER):
-        subf = os.listdir(DL_FOLDER)
-        mainf = [DL_FOLDER for i in range(len(subf))]
-        logging.info(f'Deleting Folder: {DL_FOLDER}')
-        with get_context("spawn").Pool(12) as p:
-            p.starmap(deletefolders,zip(mainf,subf))
-            p.close()
-        logging.info(f'Folder {DL_FOLDER} deleted')
-
-
-    # make concurrent calls using all the available processor
-    logging.info(f'Processing tiles. Number of tiles to process: {len(toProcess.id)}')
-    
-    # This downloads all the tiles and do some proc
-    executor = ConcurrentSHRequestExecutor(toProcess)
-    executor.executeRequests()  
-
-    logging.info('Done')
-
-    # check if all the tiles were correctly downloaded - sometimes some fail in the multi-thread mode
-    filenamesList = glob.glob(f'./{DL_FOLDER}/*/*/response.tar')
-    missing = [];
-
-    for id in toProcess.id:
-        id = round(id)
-        isPresent = False
-        for f in filenamesList:
-            if str(id) in f: 
-                isPresent = True
-                continue
-        if not isPresent:    
-            missing.append(id)
-            logging.debug(f"Id is missing: {id}")
-
-    notProcessed = toProcess[toProcess.id.isin(missing)]
-
-    logging.info(f'Number of failed tiles: {len(missing)}')
-
-    # compute missing tile individually - much slower than multy-threaded
-    logging.info('Computing failed tiles')
-    for idx in notProcessed.index: 
-        id = round(notProcessed.id[idx])
-        bounds = list(notProcessed.loc[idx].geometry.bounds)
+    if down == 1:
+        #Remove chunks that are too small to be processed
+        MIN_AREA = 0.05 * (50000 * 50000)
+        toProcess = toProcess[toProcess.geometry.to_crs('epsg:3413').area > MIN_AREA]
         
+        if os.path.exists(DL_FOLDER):
+            subf = os.listdir(DL_FOLDER)
+            mainf = [DL_FOLDER for i in range(len(subf))]
+            logging.info(f'Deleting Folder: {DL_FOLDER}')
+            with get_context("spawn").Pool(12) as p:
+                p.starmap(deletefolders,zip(mainf,subf))
+                p.close()
+            logging.info(f'Folder {DL_FOLDER} deleted')
+
+
+        # make concurrent calls using all the available processor
+        logging.info(f'Processing tiles. Number of tiles to process: {len(toProcess.id)}')
+        
+        # This downloads all the tiles and do some proc
+        executor = ConcurrentSHRequestExecutor(toProcess)
+        executor.executeRequests()  
+
+        logging.info('Done')
+
+        # check if all the tiles were correctly downloaded - sometimes some fail in the multi-thread mode
+        filenamesList = glob.glob(f'./{DL_FOLDER}/*/*/response.tar')
+        missing = [];
+
+        for id in toProcess.id:
+            id = round(id)
+            isPresent = False
+            for f in filenamesList:
+                if str(id) in f: 
+                    isPresent = True
+                    continue
+            if not isPresent:    
+                missing.append(id)
+                logging.debug(f"Id is missing: {id}")
+
+        notProcessed = toProcess[toProcess.id.isin(missing)]
+
+        logging.info(f'Number of failed tiles: {len(missing)}')
+
+        # compute missing tile individually - much slower than multy-threaded
+        logging.info('Computing failed tiles')
+        for idx in notProcessed.index: 
+            id = round(notProcessed.id[idx])
+            bounds = list(notProcessed.loc[idx].geometry.bounds)
             
-        processList(id, bounds,res,0)    
+                
+            processList(id, bounds,res,0)    
 
-    logging.info('Done')
-
-
-    logging.info('Extracting .tar responses')
-    filenamesList = glob.glob(f'./{DL_FOLDER}/*/*/response.tar')
-    dest = [file.replace('response.tar', '') for file in filenamesList]
-
-    with get_context("spawn").Pool(12) as p:     
-        p.starmap(tarextract,zip(filenamesList,dest))
-        p.close()
-
-    logging.info("Done")
+        logging.info('Done')
 
 
+        logging.info('Extracting .tar responses')
+        filenamesList = glob.glob(f'./{DL_FOLDER}/*/*/response.tar')
+        dest = [file.replace('response.tar', '') for file in filenamesList]
+
+        with get_context("spawn").Pool(12) as p:     
+            p.starmap(tarextract,zip(filenamesList,dest))
+            p.close()
+
+        logging.info("Done")
+    
+    skip = 0
     bands = np.arange(1,22)
     
     bands_sice = np.concatenate((bands[bands < 12],bands[bands > 15]))
@@ -813,6 +856,7 @@ if __name__ == "__main__":
     sceneno = [item for sublist in sceneno for item in sublist]
 
     usrpath = [USR_PATH for ii in range(len(sceneno))]
+    area_list =  [area for ii in range(len(sceneno))]
     dlfolder = [DL_FOLDER for ii in range(len(sceneno))]
     datecams = [date for x in range(len(demPathsfilt))]
 
@@ -820,12 +864,11 @@ if __name__ == "__main__":
 
     with get_context("spawn").Pool(12) as p:
             logging.info('Executing pysicehub')
-            p.starmap(multiproc,zip(main,scenes,sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,datecams))
+            p.starmap(multiproc,zip(main,scenes,sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,datecams,area_list))
             p.close()
             p.join()
             logging.info("Done")
 
-    
     proproduct = [PROCESSED_FOLDER for ii in range(len(products))]
     dlproduct = [DL_FOLDER for ii in range(len(products))]
     
@@ -862,10 +905,13 @@ if __name__ == "__main__":
         logging.info(f'Deleting Folder: {DL_FOLDER}')
         with get_context("spawn").Pool(12) as p:     
             p.starmap(deletefolders,zip(mainf,subf))
-       
+        #shutil.rmtree(DL_FOLDER)
         logging.info(f'Folder {DL_FOLDER} deleted')
 
+        #if os.path.exists(resultsDataPath):
+        #    shutil.rmtree(resultsDataPath)
+        #    logging.info(f'Folder {resultsDataPath} deleted')
 
     logging.info('Converting to netcdf and uploading to Dataverse')
     finalOutput =  f'{OUTPUT_DIR}/sice_{res}_{DATE_FOLDER}'
-    dataverse_upload(finalOutput)
+    dataverse_upload(finalOutput,area)
