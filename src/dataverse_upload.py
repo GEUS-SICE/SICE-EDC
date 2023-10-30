@@ -35,7 +35,9 @@ def opentiff(filename):
 
 def to_netcdf(folder):
     
-    meta = pd.read_csv("nc_var_meta.csv")
+    BASE_PATH = os.path.abspath('..')
+    UTIL_FOLDER = BASE_PATH + os.sep + 'util'
+    meta = pd.read_csv(UTIL_FOLDER + os.sep + "nc_var_meta.csv")
     names = meta["names"] 
     longnames = meta["long_names"]
     units = meta["units"]
@@ -182,13 +184,14 @@ def dataverse_upload(folder,area):
     # Update the 4 params below to run this code
     # --------------------------------------------------
     
-    
+    BASE_PATH = os.path.abspath('..')
+    UTIL_FOLDER = BASE_PATH + os.sep + 'util'
     
     dataverse_server = 'https://dataverse.geus.dk'
     api_key = '44154c44-ec27-46c5-945e-9f46bb102950'
     
     #doi = pd.read_csv("GEUSdataverse_doi.csv")
-    doi_csv = pd.read_csv('GEUSdataverse_doi.csv')
+    doi_csv = pd.read_csv(UTIL_FOLDER + os.sep + 'GEUSdataverse_doi.csv')
     doi = doi_csv[area][0]
     
     #api = NativeApi(dataverse_server,api_key)

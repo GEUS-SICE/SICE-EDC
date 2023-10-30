@@ -728,8 +728,8 @@ if __name__ == "__main__":
     logging.info("Configuration ok.")    
     
     down = 1
-    
-    utc_shift = int(pd.read_csv("UTC_TimeShift.csv")[area])
+    UTIL_FOLDER = BASE_PATH + os.sep + 'util'
+    utc_shift = int(pd.read_csv(UTIL_FOLDER + os.sep + "UTC_TimeShift.csv")[area])
     date_morning = str(8 - utc_shift).zfill(2)
     date_evening = str(18 - utc_shift).zfill(2)
     
@@ -738,7 +738,7 @@ if __name__ == "__main__":
     
     date_range = (f'{date}T{date_morning}:00:00', f'{date}T{date_evening}:00:00')
 
-
+   
     DATE_FOLDER = date.replace("-","_")
     DL_FOLDER =  os.path.join(BASE_PATH,'downloads', str(res), DATE_FOLDER)
     PROCESSED_FOLDER = f'{DL_FOLDER}/processed'
