@@ -1,5 +1,3 @@
-# SICE-EDC
-Euro Data Cube Version of SICE Pipeline
 
 [[https://www.gnu.org/licenses/gpl-3.0][https://img.shields.io/badge/License-GPLv3-blue.svg]]
 [[https://github.com/GEUS-SICE/SICE/actions][file:https://github.com/GEUS-SICE/SICE/workflows/CI/badge.svg]]
