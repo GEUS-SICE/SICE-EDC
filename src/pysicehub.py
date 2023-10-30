@@ -621,8 +621,8 @@ if __name__ == "__main__":
     area = args.area
     res = args.res # minimum resolution of data is 300m
     test = args.test
-    USR_PATH = os.path.abspath('.')
-
+    USR_PATH = os.getcwd()
+    BASE_PATH = os.path.abspath('..')
     # create logs folder
     if not os.path.exists("logs"):
         os.makedirs("logs")
@@ -644,7 +644,7 @@ if __name__ == "__main__":
 
     #area of interest
                                      
-    tiles_area = USR_PATH +os.sep + 'masks' + os.sep + 'tiles' + os.sep + area + "_50kmTilesBuffer.geojson"
+    tiles_area = BASE_PATH + os.sep + 'masks' + os.sep + 'tiles' + os.sep + area + "_50kmTilesBuffer.geojson"
                                      
     toProcess = gpd.read_file(tiles_area)
 
@@ -669,7 +669,7 @@ if __name__ == "__main__":
     DELETE_DOWNLOAD_FOLDER = False
 
     #OUTPUT_DIR = os.path.join(USR_PATH, "output") #local folder
-    OUTPUT_DIR =  os.path.join(USR_PATH, "output") #local folder # will be copied to the local folder of the user requesting the data
+    OUTPUT_DIR =  os.path.join(BASE_PATH, "output") #local folder # will be copied to the local folder of the user requesting the data
     # create logs folder
 
     if not os.path.exists("output"):
@@ -740,7 +740,7 @@ if __name__ == "__main__":
 
 
     DATE_FOLDER = date.replace("-","_")
-    DL_FOLDER =  os.path.join('downloads', str(res), DATE_FOLDER)
+    DL_FOLDER =  os.path.join(BASE_PATH,'downloads', str(res), DATE_FOLDER)
     PROCESSED_FOLDER = f'{DL_FOLDER}/processed'
     if down == 1:
         #Remove chunks that are too small to be processed
@@ -767,7 +767,7 @@ if __name__ == "__main__":
         logging.info('Done')
 
         # check if all the tiles were correctly downloaded - sometimes some fail in the multi-thread mode
-        filenamesList = glob.glob(f'./{DL_FOLDER}/*/*/response.tar')
+        filenamesList = glob.glob(f'{DL_FOLDER}/*/*/response.tar')
         missing = [];
 
         for id in toProcess.id:
@@ -837,13 +837,12 @@ if __name__ == "__main__":
 
     
     
-    basefolder = os.getcwd()
-    parent = basefolder + os.sep + DL_FOLDER
-    scenes = os.listdir(parent)
-    main = [parent for x in range(len(scenes))]
+   
+    scenes = os.listdir(DL_FOLDER)
+    main = [DL_FOLDER for x in range(len(scenes))]
     
-    sicePaths = glob.glob(parent + "/*/*/*toa1.tif")
-    demPaths = glob.glob(parent + "/*/*/*response.tiff")
+    sicePaths = glob.glob(DL_FOLDER + "/*/*/*toa1.tif")
+    demPaths = glob.glob(DL_FOLDER + "/*/*/*response.tiff")
 
 
     sicePathsfilt = [[s[:-8]  for s in sicePaths if (s.split(os.sep)[-3]==d.split(os.sep)[-3])] for d in demPaths]
