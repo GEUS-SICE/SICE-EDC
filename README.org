@@ -2,7 +2,7 @@
 [[https://github.com/GEUS-SICE/SICE/actions][file:https://github.com/GEUS-SICE/SICE/workflows/CI/badge.svg]]
 
 * Table of Contents                               :toc_2:noexport:
-- [[#sentinel-3a-s3a-albedo-euro-data-cube-processing-pipeline][Sentinel-3A (S3A) Albedo Euro Data Cube (EDC) Processing Pipeline]]
+- [[#sentinel-3a-s3a-albedo-euro-data-cube-edc-processing-pipeline][Sentinel-3A (S3A) Albedo Euro Data Cube (EDC) Processing Pipeline]]
   - [[#fetch-s3-olci--slstr-products][Fetch S3 OLCI & SLSTR products]]
   - [[#process-with-snap][Process with SNAP]]
   - [[#pysice][pySICE]]
