@@ -11,7 +11,8 @@ if __name__ == "__main__":
     
     args = parse_arguments()
     
-    folders = os.listdir(args.folder)
+    folder = os.path.abspath('..') + os.sep + args.folder
+    folders = os.listdir(folder)
 
     delete = ["2017","2018","2019","2020","2021","2022","2023"]
     
@@ -21,4 +22,4 @@ if __name__ == "__main__":
 
     for ff in folders_del:
         print(f'deleting {ff}')
-        shutil.rmtree(args.folder + os.sep + ff)
+        shutil.rmtree(folder + os.sep + ff)

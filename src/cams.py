@@ -73,14 +73,21 @@ import shutil
 WGSProj = CRS.from_string("+init=EPSG:4326")
 PolarProj = CRS.from_string("+init=EPSG:3413")
 
+# create logs folder
+base_path = os.path.abspath('..')
+if not os.path.exists(base_path + os.sep + "logs"):
+    os.makedirs(base_path + os.sep + "logs")
+
+# right now we only log to consol
 logging.basicConfig(
-        format='%(asctime)s [%(levelname)s] %(name)s - %(message)s',
-        level=logging.INFO,
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=[
-            logging.FileHandler(f'logs/sice_sh_{time.strftime("%Y_%m_%d",time.localtime())}.log'),
-            logging.StreamHandler()
-        ])
+    format='%(asctime)s [%(levelname)s] %(name)s - %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler(f'{base_path}/logs/sice_sh_{time.strftime("%Y_%m_%d",time.localtime())}.log'),
+        logging.StreamHandler()
+    ])
+    
 
 def blockPrint():
     sys.stdout = open(os.devnull, 'w')

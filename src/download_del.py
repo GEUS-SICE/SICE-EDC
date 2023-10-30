@@ -18,8 +18,8 @@ def deletefolders(folder,subfolder):
 if __name__ == "__main__":     
 
     args = parse_arguments()
-    
-    folders = os.listdir(args.folder)
+    folder = os.path.abspath('..') + os.sep + args.folder
+    folders = os.listdir(folder)
 
     delete = ["2017_","2018_","2019_","2020_","2021_","2022_","2023_"]
 
@@ -33,11 +33,11 @@ if __name__ == "__main__":
 
     for ff in folders_del:
         print("deleting in folder: ",ff)
-        subf = os.listdir(args.folder + os.sep + ff)
+        subf = os.listdir(folder + os.sep + ff)
 
-        mainf = [args.folder + ff for i in range(len(subf))]
+        mainf = [folder + ff for i in range(len(subf))]
 
         with get_context("spawn").Pool(12) as p:     
             p.starmap(deletefolders,zip(mainf,subf))
 
-        shutil.rmtree(args.folder + ff)
+        shutil.rmtree(folder + ff)

@@ -31,6 +31,7 @@ from sentinelhub import SentinelHubBatch, SentinelHubRequest, Geometry, DataColl
 from utils import merge_tiffs, importToBucket
 from shapely.geometry import Polygon
 import tarfile
+import traceback
 from pysice import proc
 from cams import get_maps
 
@@ -38,6 +39,21 @@ from cams import get_maps
 if sys.version_info < (3, 4):
     raise "must use python 3.6 or greater"
 
+# create logs folder
+base_path = os.path.abspath('..')
+if not os.path.exists(base_path + os.sep + "logs"):
+    os.makedirs(base_path + os.sep + "logs")
+
+# right now we only log to consol
+logging.basicConfig(
+    format='%(asctime)s [%(levelname)s] %(name)s - %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler(f'{base_path}/logs/sice_sh_{time.strftime("%Y_%m_%d",time.localtime())}.log'),
+        logging.StreamHandler()
+    ])
+    
 
 def parse_arguments():
         parser = argparse.ArgumentParser(description='')
@@ -598,8 +614,8 @@ def multiproc(main,scenes,sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,da
                 
                 logging.info(f"This Scene Would Not Process {scenes}")
                 logging.info("Scene error: ")
+                logging.info(traceback.format_exc())
                 logging.error(e)
-
     
 
     
@@ -623,19 +639,9 @@ if __name__ == "__main__":
     test = args.test
     USR_PATH = os.getcwd()
     BASE_PATH = os.path.abspath('..')
-    # create logs folder
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
-
-    # right now we only log to consol
-    logging.basicConfig(
-        format='%(asctime)s [%(levelname)s] %(name)s - %(message)s',
-        level=logging.INFO,
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=[
-            logging.FileHandler(f'logs/sice_sh_{time.strftime("%Y_%m_%d",time.localtime())}.log'),
-            logging.StreamHandler()
-        ])
+    co = 12 # number of cores used!!!!
+    
+    
 
     #External variables
     # Set the date of calculation
@@ -667,29 +673,25 @@ if __name__ == "__main__":
 
     #delete download folder after processing - will save space but will download all the data for each requwst (otherwise the cached tile data will be used)
     DELETE_DOWNLOAD_FOLDER = False
-
-    #OUTPUT_DIR = os.path.join(USR_PATH, "output") #local folder
+    
     OUTPUT_DIR =  os.path.join(BASE_PATH, "output") #local folder # will be copied to the local folder of the user requesting the data
     # create logs folder
 
-    if not os.path.exists("output"):
-        os.makedirs("output")
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR )
 
 
     
     logging.info("System configuration ok.")    
-    # initial ENV configuration
-    #SH_CLIENT_ID = %env SH_CLIENT_ID
-    #SH_CLIENT_SECRET = %env SH_CLIENT_SECRET
+    
     try:
-        SH_CLIENT_ID = os.environ.get('SH_CLIENT_ID')
-        SH_CLIENT_SECRET = os.environ.get('SH_CLIENT_SECRET')
+        SH_CLIENT_ID = os.environ.get('SH_CLIENT_ID') # Please add your SentinelHub id
+        SH_CLIENT_SECRET = os.environ.get('SH_CLIENT_SECRET')  # Please add your SentinelHub id
     except:
         logging.info("Please input your SentinelHub Client and Secret ID in pysicehub.py")
         
     
-    #print(SH_CLIENT_ID)
-    #print(SH_CLIENT_SECRET)
+   
 
     sh_config = SHConfig()
     sh_config.sh_base_url = "https://creodias.sentinel-hub.com"
@@ -698,16 +700,6 @@ if __name__ == "__main__":
     sh_config.sh_client_id = SH_CLIENT_ID
     sh_config.sh_client_secret = SH_CLIENT_SECRET
 
-    #sh_config.save()
-
-    #slstr_config = SHConfig()
-    #slstr_config.sh_base_url = "https://creodias.sentinel-hub.com"
-    #slstr_config.download_timeout_seconds=300
-
-    #slstr_config.sh_client_id = SH_CLIENT_ID
-    #slstr_config.sh_client_secret = SH_CLIENT_SECRET
-
-    #slstr_config.save()
 
     # Evalscript
     with open(EVAL_SCRIPT1_PATH, "r") as f:
@@ -751,7 +743,7 @@ if __name__ == "__main__":
             subf = os.listdir(DL_FOLDER)
             mainf = [DL_FOLDER for i in range(len(subf))]
             logging.info(f'Deleting Folder: {DL_FOLDER}')
-            with get_context("spawn").Pool(12) as p:
+            with get_context("spawn").Pool(co) as p:
                 p.starmap(deletefolders,zip(mainf,subf))
                 p.close()
             logging.info(f'Folder {DL_FOLDER} deleted')
@@ -798,16 +790,17 @@ if __name__ == "__main__":
 
 
         logging.info('Extracting .tar responses')
-        filenamesList = glob.glob(f'./{DL_FOLDER}/*/*/response.tar')
+        filenamesList = glob.glob(f'{DL_FOLDER}/*/*/response.tar')
         dest = [file.replace('response.tar', '') for file in filenamesList]
 
-        with get_context("spawn").Pool(12) as p:     
+        with get_context("spawn").Pool(co) as p:     
             p.starmap(tarextract,zip(filenamesList,dest))
             p.close()
 
         logging.info("Done")
     
     skip = 0
+
     bands = np.arange(1,22)
     
     bands_sice = np.concatenate((bands[bands < 12],bands[bands > 15]))
@@ -832,12 +825,6 @@ if __name__ == "__main__":
     out = misc_prod_out + toa_out + alb_spec_out + rBRR_spec_out
 
    
-
-    # Create SCDA of each tile
-
-    
-    
-   
     scenes = os.listdir(DL_FOLDER)
     main = [DL_FOLDER for x in range(len(scenes))]
     
@@ -854,14 +841,14 @@ if __name__ == "__main__":
     sceneno = [[s.split(os.sep)[-3]  for s in sicePaths if (s.split(os.sep)[-3]==d.split(os.sep)[-3])] for d in demPaths]
     sceneno = [item for sublist in sceneno for item in sublist]
 
-    usrpath = [USR_PATH for ii in range(len(sceneno))]
+    usrpath = [BASE_PATH for ii in range(len(sceneno))]
     area_list =  [area for ii in range(len(sceneno))]
     dlfolder = [DL_FOLDER for ii in range(len(sceneno))]
     datecams = [date for x in range(len(demPathsfilt))]
 
     
 
-    with get_context("spawn").Pool(12) as p:
+    with get_context("spawn").Pool(co) as p:
             logging.info('Executing pysicehub')
             p.starmap(multiproc,zip(main,scenes,sicePathsfilt,demPathsfilt,sceneno,usrpath,dlfolder,datecams,area_list))
             p.close()
@@ -874,7 +861,7 @@ if __name__ == "__main__":
     if not os.path.exists(PROCESSED_FOLDER):
         os.makedirs(PROCESSED_FOLDER)
     
-    with get_context("spawn").Pool(12) as p:     
+    with get_context("spawn").Pool(co) as p:     
             p.starmap(multi_merge,zip(products,dlproduct,proproduct))
             p.close()
             p.join()
@@ -902,14 +889,11 @@ if __name__ == "__main__":
         subf = os.listdir(DL_FOLDER)
         mainf = [DL_FOLDER for i in range(len(subf))]
         logging.info(f'Deleting Folder: {DL_FOLDER}')
-        with get_context("spawn").Pool(12) as p:     
+        with get_context("spawn").Pool(co) as p:     
             p.starmap(deletefolders,zip(mainf,subf))
         #shutil.rmtree(DL_FOLDER)
         logging.info(f'Folder {DL_FOLDER} deleted')
 
-        #if os.path.exists(resultsDataPath):
-        #    shutil.rmtree(resultsDataPath)
-        #    logging.info(f'Folder {resultsDataPath} deleted')
 
     logging.info('Converting to netcdf and uploading to Dataverse')
     finalOutput =  f'{OUTPUT_DIR}/sice_{res}_{DATE_FOLDER}'
