@@ -188,7 +188,7 @@ def dataverse_upload(folder,area):
     UTIL_FOLDER = BASE_PATH + os.sep + 'util'
     
     dataverse_server = 'https://dataverse.geus.dk'
-    api_key = '44154c44-ec27-46c5-945e-9f46bb102950'
+    api_key = '' # Your Dataverse api key
     
     #doi = pd.read_csv("GEUSdataverse_doi.csv")
     doi_csv = pd.read_csv(UTIL_FOLDER + os.sep + 'GEUSdataverse_doi.csv')
