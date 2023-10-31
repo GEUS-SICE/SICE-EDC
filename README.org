@@ -80,7 +80,7 @@ In more detail:
 | r_TOA_01..21_reflectance      | top of the atmosphere reflectance (OLCI bands 1 through 21)            |             |
 | rBRR_01..21                   | bottom of the atmosphere surface reflectance (OLCI bands 1 through 21) |             |
 | albedo_spectral_planar_01..21 | spectral planar albedo (OLCI bands 1 through 21)                       |             |
-| diagnostic_retrieval          | See next table.                                                        |             |
+| isnow                         | See next table.                                                        |             |
 
 
 | Diagnostic Code | Description                                                                                   |
