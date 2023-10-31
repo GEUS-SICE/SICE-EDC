@@ -35,9 +35,9 @@ if __name__ == "__main__":
         print("deleting in folder: ",ff)
         subf = os.listdir(folder + os.sep + ff)
 
-        mainf = [folder + ff for i in range(len(subf))]
+        mainf = [folder + os.sep + ff for i in range(len(subf))]
 
         with get_context("spawn").Pool(12) as p:     
             p.starmap(deletefolders,zip(mainf,subf))
 
-        shutil.rmtree(folder + ff)
+        shutil.rmtree(folder + os.sep +  ff)

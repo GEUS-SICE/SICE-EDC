@@ -74,7 +74,7 @@ def multi_merge(product,dl_f,pro_f):
         os.remove(prodResult)
         logging.info(f'Deleted file: {prodResult}')
     logging.info(f'Creating file {prodResult}')
-    filenamesList = glob.glob(f'./{dl_f}/*/*/{product}')
+    filenamesList = glob.glob(f'{dl_f}/*/*/{product}')
     if filenamesList:
         merge_tiffs(filenamesList, prodResult, overwrite=True)
     
