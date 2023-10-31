@@ -95,17 +95,6 @@ In more detail:
 |             104 | grain_diameter < 0.1, no retrieval, potential cloud flag                                      |
 |              -n | impossible to solve polluted snow albedo equation at band n                                   |
 
-* Debugging & Testing
-
-Change the year and day for loops in [[./src/wrapper.py]] to one year and one day. E.g.
-
-#+BEGIN_SRC bash :results verbatim
-for year in 2017; do # one year
-  for doy in 227 180; do # two example days
-  # loop contents
-  done
-done
-#+END_SRC
 
 * Development Environment
 
