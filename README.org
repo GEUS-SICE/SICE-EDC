@@ -49,39 +49,36 @@ In more detail:
 + Using SLSTR, clouds in every tile are detected and masked
 + Using a predifened mask, all areas in the tile that are not snow or ice are masked
 
-** Simple Cloud Detection Algorithm (SCDA) & Masking Non-Ice/Snow areas
+** Get Forecasted Aerosol data from Copernicus Atmospgeric Monotoring Service (cams)
++ Download raw forecasted aerosol optical depth at 550 nm and 670 nm for each tile
++ interpolate and regrid to SICE 500m grid
++ compute ångstrøm paramter
 
 ** pySICE
 
-+ Run [[./sice.py]] passing in one of the folders generated in the previous step.
-+ *WARNING*: This step is slow, and may take > 24 hours.
++ Run [[./pysice.py]] on all tiles
 
 ** Mosaic
-
-+ As implemented in [[./dm.sh]] and [[./dm.grass.sh]], for each day
-  + Combine all the files from to form a mosaic
-  + Mask out clouds, then...
-  + When scenes overlap, use minimum SZA
++ Merge all tiles into moasic
 
 ** Outputs
 | File Name                     | Description                                                            | Units       |
 |-------------------------------+------------------------------------------------------------------------+-------------|
 | grain_diameter                |                                                                        | mm          |
 | snow_specific_surface_area    |                                                                        | m^{2}kg^{-1}|
-| ndsi                          | normalized difference snow index                                       |             |
-| ndbi                          | normalized difference blue ice index                                   |             |
-| auto_cloud                    | in development                                                         |             |
 | sza                           | sun zenith angle                                                       |             |
 | vza                           | viewing zenith angle                                                   |             |
 | saa                           | sun azimuth angle                                                      |             |
 | vaa                           | viewing azimuth angle                                                  |             |
+| AOD_550                       | Aerosol Optical Depth (550nm)                                          | m           |
+| ANG                           | ångstrøm parameter                                                     |             |
 | albedo_bb_planar_nir          | near infrared broadband planar albedo                                  | 700-2400 nm |
 | albedo_bb_planar_sw           | shortwave broadband planar albedo                                      | 300-2400 nm |
 | albedo_bb_planar_vis          | visible broadband planar albedo                                        | 300-700 nm  |
 | albedo_bb_spherical_nir       | near infrared broadband spherical albedo                               | 700-2400 nm |
 | albedo_bb_spherical_sw        | shortwave broadband spherical albedo                                   | 300-2400 nm |
 | albedo_bb_spherical_vis       | visible broadband spherical albedo                                     | 300-700 nm  |
-| Oa01..21_reflectance          | top of the atmosphere reflectance (OLCI bands 1 through 21)            |             |
+| r_TOA_01..21_reflectance      | top of the atmosphere reflectance (OLCI bands 1 through 21)            |             |
 | rBRR_01..21                   | bottom of the atmosphere surface reflectance (OLCI bands 1 through 21) |             |
 | albedo_spectral_planar_01..21 | spectral planar albedo (OLCI bands 1 through 21)                       |             |
 | diagnostic_retrieval          | See next table.                                                        |             |
