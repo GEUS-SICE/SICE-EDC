@@ -3,8 +3,11 @@
 
 * Table of Contents                               :toc_2:noexport:
 - [[#sentinel-3a-s3a-albedo-euro-data-cube-edc-processing-pipeline][Sentinel-3A (S3A) Albedo Euro Data Cube (EDC) Processing Pipeline]]
-  - [[#fetch-s3-olci--slstr-products][Fetch S3 OLCI & SLSTR products]]
-  - [[#process-with-snap][Process with SNAP]]
+  - [[#fetch-s3a-olci--slstr-products-using-sentinelhub-sh][Fetch S3A OLCI & SLSTR products using SentinelHub (SH)]]
+  - [[#divide-area-into-tiles][Divide Area Into Tiles]]
+  - [[#start-multiprocessing][Start Multiprocessing]]
+  - [[#scda--ice-mask][SCDA & Ice Mask]]'
+  - [[#cams-aerosol][cams Aerosol]]
   - [[#pysice][pySICE]]
   - [[#mosaic][Mosaic]]
   - [[#outputs][Outputs]]
@@ -24,10 +27,13 @@
 
 * Sentinel-3A (S3A) Albedo Euro Data Cube (EDC) Processing Pipeline
 
-1. Fetch S3 OLCI & SLSTR products
-2. Process OLCI & SLSTR using SNAP GPT
-3. Process using pySICE
-4. Build daily mosaic
+1. Fetch S3A OLCI & SLSTR products using SentinelHub (SH)
+2. Divide Area Into Tiles
+3. Start Multiprocessing
+4. Simple Cloud Detection Algorithm (SCDA) & Masking Non-Ice/Snow areas
+5. Get Forecasted Aerosol data from Copernicus Atmospgeric Monotoring Service (cams)
+6. Compute outputs with pySICE
+7. Merge all tiles into one daily mosaic
 
 The steps above are encapsulated in [[./S3_wrapper.sh]].
 
