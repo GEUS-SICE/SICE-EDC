@@ -40,7 +40,7 @@ In more detail:
 
 ** pySICE
 
-+ Run [[./pysice.py]] on all tiles
++ Run [[./src/pysice.py]] on all tiles
 
 ** Mosaic
 + Merge all tiles into moasic
